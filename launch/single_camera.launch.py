@@ -18,8 +18,8 @@ def generate_launch_description() -> LaunchDescription:
 
     """
     # parameters
-    camera_param_name = "right_camera"
-    camera_param_default = str(1)
+    camera_param_name = "camera"
+    camera_param_default = str(0)
     camera_param = LaunchConfiguration(
         camera_param_name,
         default=camera_param_default,
@@ -31,7 +31,7 @@ def generate_launch_description() -> LaunchDescription:
     )
 
     format_param_name = "format"
-    format_param_default = str('BGR888')
+    format_param_default = str("BGR888")
     format_param = LaunchConfiguration(
         format_param_name,
         default=format_param_default,
@@ -47,7 +47,6 @@ def generate_launch_description() -> LaunchDescription:
         ComposableNode(
             package='camera_ros',
             plugin='camera::CameraNode',
-            name='right_camera',
             parameters=[{
                 "camera": camera_param,
                 "width": 640,
