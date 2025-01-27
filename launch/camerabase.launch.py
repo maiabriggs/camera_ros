@@ -52,7 +52,7 @@ def generate_launch_description() -> LaunchDescription:
                 "camera": left_camera_param,
                 "width": 640,
                 "height": 480,
-                "format": '',
+                "format": format_param,
                 "role" : 'raw',
             }],
             extra_arguments=[{'use_intra_process_comms': True}],
