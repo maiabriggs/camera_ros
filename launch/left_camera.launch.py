@@ -12,7 +12,7 @@ def generate_launch_description():
                 {'camera': 0},
                 {'role': 'raw'},
                 {'width': 1640},
-                {'height': 1232},
+                {'height': 1232}
             ]
         )
     ])

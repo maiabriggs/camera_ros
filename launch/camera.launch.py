@@ -13,6 +13,7 @@ def generate_launch_description():
                 {'role': 'raw'},
                 {'width': 1640},
                 {'height': 1232},
+                {'format': str('BGR888')},
             ]
         ),
         
