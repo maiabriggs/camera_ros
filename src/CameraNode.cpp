@@ -26,6 +26,7 @@
 #include <libcamera/camera.h>
 #include <libcamera/camera_manager.h>
 #include <libcamera/control_ids.h>
+#include <libcamera/formats.h>
 #include <libcamera/framebuffer.h>
 #include <libcamera/framebuffer_allocator.h>
 #include <libcamera/geometry.h>
@@ -204,7 +205,7 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options) : Node("camera", opti
   rcl_interfaces::msg::ParameterDescriptor param_descr_format;
   param_descr_format.description = "pixel format of streaming buffer";
   param_descr_format.read_only = true;
-  declare_parameter<std::string>("format", {}, param_descr_format);
+  const std::string &format = declare_parameter<std::string>("format", {}, param_descr_format);
 
   // stream role
   rcl_interfaces::msg::ParameterDescriptor param_descr_role;
@@ -219,21 +220,31 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options) : Node("camera", opti
   declare_parameter<int64_t>("width", {}, param_descr_ro);
   declare_parameter<int64_t>("height", {}, param_descr_ro);
 
+  // camera info file url
+  rcl_interfaces::msg::ParameterDescriptor param_descr_camera_info_url;
+  param_descr_camera_info_url.description = "camera calibration info file url";
+  param_descr_camera_info_url.read_only = true;
+
   // camera ID
   declare_parameter("camera", rclcpp::ParameterValue {}, param_descr_ro.set__dynamic_typing(true));
 
-  rcl_interfaces::msg::ParameterDescriptor jpeg_quality_description;
-  jpeg_quality_description.name = "jpeg_quality";
-  jpeg_quality_description.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
-  jpeg_quality_description.description = "Image quality for JPEG format";
-  jpeg_quality_description.read_only = false;
-  rcl_interfaces::msg::IntegerRange jpeg_range;
-  jpeg_range.from_value = 1;
-  jpeg_range.to_value = 100;
-  jpeg_range.step = 1;
-  jpeg_quality_description.integer_range = {jpeg_range};
-  // default to 95
-  jpeg_quality = declare_parameter<uint8_t>("jpeg_quality", 95, jpeg_quality_description);
+  // we cannot control the compression rate of the libcamera MJPEG stream
+  // ignore "jpeg_quality" parameter for MJPEG streams
+  if (libcamera::PixelFormat::fromString(format) != libcamera::formats::MJPEG) {
+    rcl_interfaces::msg::ParameterDescriptor jpeg_quality_description;
+    jpeg_quality_description.name = "jpeg_quality";
+    jpeg_quality_description.type = rcl_interfaces::msg::ParameterType::PARAMETER_INTEGER;
+    jpeg_quality_description.description = "Image quality for JPEG format";
+    jpeg_quality_description.read_only = false;
+    rcl_interfaces::msg::IntegerRange jpeg_range;
+    jpeg_range.from_value = 1;
+    jpeg_range.to_value = 100;
+    jpeg_range.step = 1;
+    jpeg_quality_description.integer_range = {jpeg_range};
+    // default to 95
+    jpeg_quality = declare_parameter<uint8_t>("jpeg_quality", 95, jpeg_quality_description);
+  }
+
   // publisher for raw and compressed image
   pub_image = this->create_publisher<sensor_msgs::msg::Image>("~/image_raw", 1);
   pub_image_compressed =
@@ -311,7 +322,6 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options) : Node("camera", opti
   if (common_fmt.empty())
     throw std::runtime_error("camera does not provide any of the supported pixel formats");
 
-  const std::string format = get_parameter("format").as_string();
   if (format.empty()) {
     // check that the default pixel format is supported by the ROS encoding
     if (std::find(common_fmt.cbegin(), common_fmt.cend(), scfg.pixelFormat) == common_fmt.cend()) {
@@ -393,6 +403,15 @@ CameraNode::CameraNode(const rclcpp::NodeOptions &options) : Node("camera", opti
 
   if (!cim.setCameraName(cname))
     throw std::runtime_error("camera name must only contain alphanumeric characters");
+
+  const std::string &camera_info_url = declare_parameter<std::string>(
+    "camera_info_url", {}, param_descr_camera_info_url);
+  if (!cim.loadCameraInfo(camera_info_url)) {
+    if (!camera_info_url.empty()) {
+      RCLCPP_WARN_STREAM(get_logger(), "failed to load camera calibration info from provided URL, using default URL");
+      cim.loadCameraInfo({});
+    }
+  }
 
   declareParameters();
 
@@ -497,42 +516,59 @@ CameraNode::declareParameters()
     // store control id with name
     parameter_ids[id->name()] = id;
 
-    if (info.min().numElements() != info.max().numElements())
-      throw std::runtime_error("minimum and maximum parameter array sizes do not match");
+    std::size_t extent;
+    try {
+      extent = get_extent(id);
+    }
+    catch (const unknown_control &e) {
+      // ignore
+      RCLCPP_WARN_STREAM(get_logger(), e.what());
+      continue;
+    }
+
+    const bool ctrl_scalar = (extent == 0);
+    const bool ctrl_dynamic = (extent == libcamera::dynamic_extent);
+    const bool ctrl_fixed = !(ctrl_scalar || ctrl_dynamic);
+
+    if (ctrl_fixed && !info.def().isArray() && !info.def().isNone()) {
+      RCLCPP_WARN_STREAM(get_logger(),
+                         id->name() << ": cannot set default scalar value "
+                                    << "on span control (extend: " << extent << ")");
+      continue;
+    }
+
+    if (info.min().numElements() != info.max().numElements()) {
+      RCLCPP_WARN_STREAM(get_logger(),
+                         id->name() << ": minimum (" << info.min().numElements() << ") and "
+                                    << "maximum (" << info.max().numElements() << ") parameter "
+                                    << "array sizes do not match");
+      continue;
+    }
 
     // check if the control can be mapped to a parameter
     rclcpp::ParameterType pv_type;
     try {
       pv_type = cv_to_pv_type(id);
-      if (pv_type == rclcpp::ParameterType::PARAMETER_NOT_SET) {
-        RCLCPP_WARN_STREAM(get_logger(), "unsupported control '" << id->name() << "'");
-        continue;
-      }
     }
-    catch (const std::runtime_error &e) {
-      // ignore
+    catch (const unknown_control &e) {
+      // ignore not yet handled control
+      RCLCPP_WARN_STREAM(get_logger(), e.what());
+      continue;
+    }
+    catch (const unsupported_control &e) {
+      // ignore control which cannot be supported
       RCLCPP_WARN_STREAM(get_logger(), e.what());
       continue;
     }
 
     // format type description
     rcl_interfaces::msg::ParameterDescriptor param_descr;
-    try {
-      const std::size_t extent = get_extent(id);
-      const bool scalar = (extent == 0);
-      const bool dynamic = (extent == libcamera::dynamic_extent);
-      const std::string cv_type_descr =
-        scalar ? "scalar" : "array[" + (dynamic ? std::string() : std::to_string(extent)) + "]";
-      param_descr.description =
-        std::to_string(id->type()) + " " + cv_type_descr + " range {" + info.min().toString() +
-        "}..{" + info.max().toString() + "}" +
-        (info.def().isNone() ? std::string {} : " (default: {" + info.def().toString() + "})");
-    }
-    catch (const std::runtime_error &e) {
-      // ignore
-      RCLCPP_WARN_STREAM(get_logger(), e.what());
-      continue;
-    }
+    const std::string cv_type_descr =
+      ctrl_scalar ? "scalar" : "array[" + (ctrl_dynamic ? std::string() : std::to_string(extent)) + "]";
+    param_descr.description =
+      std::to_string(id->type()) + " " + cv_type_descr + " range {" + info.min().toString() +
+      "}..{" + info.max().toString() + "}" +
+      (info.def().isNone() ? std::string {} : " (default: {" + info.def().toString() + "})");
 
     // get smallest bounds for minimum and maximum set
     rcl_interfaces::msg::IntegerRange range_int;
