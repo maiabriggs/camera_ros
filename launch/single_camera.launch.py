@@ -19,7 +19,7 @@ def generate_launch_description() -> LaunchDescription:
     """
     # parameters
     camera_param_name = "camera"
-    camera_param_default = str(0)
+    camera_param_default = str(2)
     camera_param = LaunchConfiguration(
         camera_param_name,
         default=camera_param_default,
