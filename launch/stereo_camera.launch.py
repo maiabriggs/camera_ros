@@ -3,7 +3,6 @@ from ament_index_python.resources import has_resource
 from launch.actions import DeclareLaunchArgument
 from launch.launch_description import LaunchDescription
 from launch.substitutions import LaunchConfiguration
-
 from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 
@@ -50,8 +49,8 @@ def generate_launch_description() -> LaunchDescription:
             name='left_camera_node',
             parameters=[{
                 "camera": left_camera_param,
-                "width": 640,
-                "height": 480,
+                "width": 320,
+                "height": 240,
                 "format": format_param,
             }],
             extra_arguments=[{'use_intra_process_comms': True}],
@@ -81,8 +80,8 @@ def generate_launch_description() -> LaunchDescription:
             name='right_camera_node',
             parameters=[{
                 "camera": right_camera_param,
-                "width": 640,
-                "height": 480,
+                "width": 320,
+                "height": 240,
                 "format": format_param,
             }],
             extra_arguments=[{'use_intra_process_comms': True}],
