@@ -41,6 +41,18 @@ def generate_launch_description() -> LaunchDescription:
         description="pixel format"
     )
 
+    left_camera_url_param = "left_ci_file_url"
+    left_camera_url_param_default = str('left.yaml')
+    left_camera_url_param = LaunchConfiguration(
+	left_camera_url_param,
+	default=left_camera_url_param_default,
+    )
+    left_camera_url_launch_arg =  DeclareLaunchArgument(
+	left_camera_url_param,
+	default_value=left_camera_url_param_default,
+	description="left camera info url"
+    )
+
     # camera node
     left_composable_nodes = [
         ComposableNode(
@@ -52,6 +64,7 @@ def generate_launch_description() -> LaunchDescription:
                 "width": 320,
                 "height": 240,
                 "format": format_param,
+		        "ci_file_url": left_camera_url_param,
             }],
             extra_arguments=[{'use_intra_process_comms': True}],
         ),
@@ -123,4 +136,6 @@ def generate_launch_description() -> LaunchDescription:
         right_container,
         right_camera_launch_arg,
         format_launch_arg,
+        left_camera_url_launch_arg,
+        
     ])

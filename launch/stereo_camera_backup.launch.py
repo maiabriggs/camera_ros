@@ -120,7 +120,7 @@ def generate_launch_description() -> LaunchDescription:
     return LaunchDescription([
         left_container,
         left_camera_launch_arg,
-        # right_container,
-        # right_camera_launch_arg,
+        right_container,
+        right_camera_launch_arg,
         format_launch_arg,
     ])
