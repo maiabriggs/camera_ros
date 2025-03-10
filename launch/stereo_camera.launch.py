@@ -41,8 +41,8 @@ def generate_launch_description() -> LaunchDescription:
         description="pixel format"
     )
 
-    left_camera_url_param = "left_ci_file_url"
-    left_camera_url_param_default = str('left.yaml')
+    left_camera_url_param = "camera_info_url"
+    left_camera_url_param_default = str("\home\maia\camera_calibration_info\left.yaml")
     left_camera_url_param = LaunchConfiguration(
 	left_camera_url_param,
 	default=left_camera_url_param_default,

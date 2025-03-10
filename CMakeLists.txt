@@ -4,7 +4,7 @@ project(camera_ros)
 set(CMAKE_CXX_STANDARD 20)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
+  add_compile_options(-Wall -Wextra -Wpedantic -Werror)
   add_link_options("-Wl,-z,relro,-z,now,-z,defs")
 endif()
 
@@ -58,12 +58,7 @@ set_property(TARGET param PROPERTY POSITION_INDEPENDENT_CODE ON)
 # composable ROS2 node
 add_library(camera_component SHARED src/CameraNode.cpp)
 rclcpp_components_register_node(camera_component PLUGIN "camera::CameraNode" EXECUTABLE "camera_node")
-
-target_include_directories(camera_component PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-  $<INSTALL_INTERFACE:include>)
-ament_target_dependencies(
-  camera_component
+set(PACKAGE_DEPENDENCIES
   "rclcpp"
   "rclcpp_components"
   "sensor_msgs"
@@ -75,10 +70,11 @@ target_include_directories(camera_component PUBLIC ${libcamera_INCLUDE_DIRS})
 target_link_libraries(camera_component PUBLIC ${libcamera_LINK_LIBRARIES})
 target_link_libraries(camera_component PRIVATE utils param)
 
-target_include_directories(camera_component PUBLIC ${libcamera_INCLUDE_DIRS})
-target_link_libraries(camera_component ${libcamera_LINK_LIBRARIES} utils)
+ament_export_targets(camera_componentTargets HAS_LIBRARY_TARGET)
+ament_export_dependencies(${PACKAGE_DEPENDENCIES})
 
 install(TARGETS camera_component
+  EXPORT camera_componentTargets
   DESTINATION lib)
 
 install(DIRECTORY
